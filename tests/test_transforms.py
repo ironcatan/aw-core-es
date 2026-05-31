@@ -6,6 +6,7 @@ from aw_transform import (
     filter_period_intersect,
     filter_keyvals_regex,
     filter_keyvals,
+    merge_subwatcher_fields,
     period_union,
     sort_by_timestamp,
     sort_by_duration,
@@ -469,3 +470,127 @@ def test_union_no_overlap():
     dur = sum((e.duration for e in events_union), timedelta(0))
     assert dur == timedelta(hours=5, minutes=0)
     assert sorted(events_union, key=lambda e: e.timestamp)
+
+
+def test_merge_subwatcher_fields_basic():
+    """Subwatcher fields are injected into overlapping base events."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td1h = timedelta(hours=1)
+
+    base = [
+        Event(
+            timestamp=now,
+            duration=td1h,
+            data={"app": "vim", "title": "file.py"},
+        )
+    ]
+    sub = [
+        Event(
+            timestamp=now,
+            duration=td1h,
+            data={"project": "myproject", "file": "file.py", "language": "python"},
+        )
+    ]
+    result = merge_subwatcher_fields(base, sub, ["project", "file", "language"])
+
+    assert len(result) == 1
+    # Original base fields preserved
+    assert result[0].data["app"] == "vim"
+    assert result[0].data["title"] == "file.py"
+    # Subwatcher fields injected
+    assert result[0].data["project"] == "myproject"
+    assert result[0].data["language"] == "python"
+    # Timestamps and durations unchanged
+    assert result[0].timestamp == now
+    assert result[0].duration == td1h
+
+
+def test_merge_subwatcher_fields_no_overlap():
+    """Base events with no overlapping subwatcher event are returned unchanged."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td1h = timedelta(hours=1)
+
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
+    # Subwatcher event is entirely after the base event
+    sub = [
+        Event(
+            timestamp=now + 2 * td1h,
+            duration=td1h,
+            data={"project": "other"},
+        )
+    ]
+    result = merge_subwatcher_fields(base, sub, ["project"])
+
+    assert len(result) == 1
+    assert "project" not in result[0].data
+    assert result[0].data["app"] == "vim"
+
+
+def test_merge_subwatcher_fields_base_wins_conflict():
+    """With conflict='base_wins' (default), existing base keys are not overwritten."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td1h = timedelta(hours=1)
+
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim", "file": "base.py"})]
+    sub = [Event(timestamp=now, duration=td1h, data={"file": "sub.py", "project": "p"})]
+
+    result = merge_subwatcher_fields(
+        base, sub, ["file", "project"], conflict="base_wins"
+    )
+    # base's "file" must not be overwritten
+    assert result[0].data["file"] == "base.py"
+    # "project" not in base → injected from sub
+    assert result[0].data["project"] == "p"
+
+
+def test_merge_subwatcher_fields_sub_wins_conflict():
+    """With conflict='sub_wins', subwatcher fields overwrite base fields."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td1h = timedelta(hours=1)
+
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim", "file": "base.py"})]
+    sub = [Event(timestamp=now, duration=td1h, data={"file": "sub.py"})]
+
+    result = merge_subwatcher_fields(base, sub, ["file"], conflict="sub_wins")
+    assert result[0].data["file"] == "sub.py"
+
+
+def test_merge_subwatcher_fields_attach_longest():
+    """When multiple subwatcher events overlap a base event, the longest overlap wins."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td30m = timedelta(minutes=30)
+    td1h = timedelta(hours=1)
+
+    # Base event: 12:00 – 13:00
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
+    # Short overlap: 12:00 – 12:30 (30 min)
+    sub_short = Event(timestamp=now, duration=td30m, data={"project": "short"})
+    # Long overlap: 12:30 – 13:00 (30 min) — same overlap here, but added first
+    # Make one clearly longer: 11:45 – 13:00 (75 min overlap into base)
+    sub_long = Event(
+        timestamp=now - timedelta(minutes=15),
+        duration=td1h + timedelta(minutes=15),
+        data={"project": "long"},
+    )
+    result = merge_subwatcher_fields(base, [sub_short, sub_long], ["project"])
+    assert result[0].data["project"] == "long"
+
+
+def test_merge_subwatcher_fields_empty_inputs():
+    """Empty sub or keys returns base unchanged."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td1h = timedelta(hours=1)
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
+
+    # Empty subwatcher list
+    result = merge_subwatcher_fields(base, [], ["project"])
+    assert result[0].data == {"app": "vim"}
+
+    # Empty keys list
+    sub = [Event(timestamp=now, duration=td1h, data={"project": "p"})]
+    result = merge_subwatcher_fields(base, sub, [])
+    assert "project" not in result[0].data
+
+    # Both empty
+    result = merge_subwatcher_fields(base, [], [])
+    assert result[0].data == {"app": "vim"}
