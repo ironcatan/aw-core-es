@@ -1,6 +1,7 @@
 from pprint import pprint
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from aw_core.models import Event
 from aw_transform import (
     filter_period_intersect,
@@ -577,20 +578,34 @@ def test_merge_subwatcher_fields_attach_longest():
 
 
 def test_merge_subwatcher_fields_empty_inputs():
-    """Empty sub or keys returns base unchanged."""
+    """Empty sub or keys returns a defensive copy of base (not the same list)."""
     now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
     td1h = timedelta(hours=1)
     base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
 
-    # Empty subwatcher list
+    # Empty subwatcher list — returns a new list, data unchanged
     result = merge_subwatcher_fields(base, [], ["project"])
     assert result[0].data == {"app": "vim"}
+    assert result is not base
 
     # Empty keys list
     sub = [Event(timestamp=now, duration=td1h, data={"project": "p"})]
     result = merge_subwatcher_fields(base, sub, [])
     assert "project" not in result[0].data
+    assert result is not base
 
     # Both empty
     result = merge_subwatcher_fields(base, [], [])
     assert result[0].data == {"app": "vim"}
+    assert result is not base
+
+
+def test_merge_subwatcher_fields_invalid_conflict():
+    """Invalid conflict value raises ValueError immediately."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td1h = timedelta(hours=1)
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
+    sub = [Event(timestamp=now, duration=td1h, data={"project": "p"})]
+
+    with pytest.raises(ValueError, match="conflict must be"):
+        merge_subwatcher_fields(base, sub, ["project"], conflict="invalid")

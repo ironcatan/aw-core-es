@@ -61,8 +61,12 @@ def merge_subwatcher_fields(
         with the **longest overlap duration** is used (attach-longest strategy).
         This matches heartbeat granularity and avoids splitting base events.
     """
+    if conflict not in ("base_wins", "sub_wins"):
+        raise ValueError(
+            f"conflict must be 'base_wins' or 'sub_wins', got {conflict!r}"
+        )
     if not subwatcher_events or not keys:
-        return base_events
+        return [deepcopy(e) for e in base_events]
 
     # Build a sorted copy so we can do a linear scan
     sub_sorted = sorted(subwatcher_events, key=lambda e: e.timestamp)

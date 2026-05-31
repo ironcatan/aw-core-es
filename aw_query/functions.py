@@ -231,9 +231,9 @@ def q2_merge_events_by_keys(events: list, keys: list) -> List[Event]:
 @q2_function(merge_subwatcher_fields)
 @q2_typecheck
 def q2_merge_subwatcher_fields(
-    base_events: list, subwatcher_events: list, keys: list
+    base_events: list, subwatcher_events: list, keys: list, conflict: str = "base_wins"
 ) -> List[Event]:
-    return merge_subwatcher_fields(base_events, subwatcher_events, keys)
+    return merge_subwatcher_fields(base_events, subwatcher_events, keys, conflict)
 
 
 @q2_function(chunk_events_by_key)
