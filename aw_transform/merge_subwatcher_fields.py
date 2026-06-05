@@ -61,7 +61,9 @@ def merge_subwatcher_fields(
     Note on overlap:
         Base events are split at the clipped subwatcher boundaries so each
         output segment only carries the subwatcher fields that were actually
-        present during that slice of time.
+        present during that slice of time. If multiple subwatcher events cover
+        the same slice, the most recent one wins so a later transition does not
+        get smeared backward by an older, longer pulse.
     """
     if conflict not in ("base_wins", "sub_wins"):
         raise ValueError(
@@ -102,17 +104,25 @@ def merge_subwatcher_fields(
         for start, end in zip(boundary_points, boundary_points[1:]):
             segment_period = Timeslot(start, end)
             best_sub: Optional[Event] = None
-            best_overlap_secs: float = 0.0
+            best_sub_period: Optional[Timeslot] = None
 
             for sub, sub_period in overlapping:
-                ip = segment_period.intersection(sub_period)
-                if not ip:
+                if not segment_period.intersection(sub_period):
                     continue
 
-                overlap_secs = ip.duration.total_seconds()
-                if overlap_secs > best_overlap_secs:
-                    best_overlap_secs = overlap_secs
+                # Later subwatcher events should supersede older overlapping
+                # pulses on the shared slice instead of letting stale data linger.
+                if (
+                    best_sub is None
+                    or sub.timestamp > best_sub.timestamp
+                    or (
+                        sub.timestamp == best_sub.timestamp
+                        and best_sub_period is not None
+                        and sub_period.end > best_sub_period.end
+                    )
+                ):
                     best_sub = sub
+                    best_sub_period = sub_period
 
             enriched = deepcopy(base)
             enriched.timestamp = start

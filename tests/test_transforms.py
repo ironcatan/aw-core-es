@@ -537,6 +537,35 @@ def test_merge_subwatcher_fields_partial_overlap_splits_base():
     assert sum_durations(result) == td1h
 
 
+def test_merge_subwatcher_fields_overlapping_subwatchers_prefer_latest_start():
+    """Newer overlapping subwatcher events take over from their own start time."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td20m = timedelta(minutes=20)
+    td40m = timedelta(minutes=40)
+    td1h = timedelta(hours=1)
+
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
+    sub = [
+        Event(timestamp=now, duration=td40m, data={"project": "alpha"}),
+        Event(timestamp=now + td20m, duration=td40m, data={"project": "beta"}),
+    ]
+
+    result = merge_subwatcher_fields(base, sub, ["project"])
+
+    assert len(result) == 2
+    assert [event.timestamp for event in result] == [now, now + td20m]
+    assert [event.duration for event in result] == [td20m, td40m]
+    assert [event.data.get("project") for event in result] == ["alpha", "beta"]
+
+    by_project = {
+        event.data.get("project"): event.duration
+        for event in merge_events_by_keys(result, ["project"])
+    }
+    assert by_project["alpha"] == td20m
+    assert by_project["beta"] == td40m
+    assert sum_durations(result) == td1h
+
+
 def test_merge_subwatcher_fields_no_overlap():
     """Base events with no overlapping subwatcher event are returned unchanged."""
     now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
