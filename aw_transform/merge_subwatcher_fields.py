@@ -59,9 +59,9 @@ def merge_subwatcher_fields(
         # Now categorize(window_events, ...) can match on "project"/"file"
 
     Note on overlap:
-        Base events are split at the clipped subwatcher boundaries. When
-        multiple subwatcher events overlap the same output segment, the one
-        with the **longest overlap with that segment** is used.
+        Base events are split at the clipped subwatcher boundaries so each
+        output segment only carries the subwatcher fields that were actually
+        present during that slice of time.
     """
     if conflict not in ("base_wins", "sub_wins"):
         raise ValueError(
@@ -98,6 +98,7 @@ def merge_subwatcher_fields(
             continue
 
         boundary_points = sorted(boundaries)
+        base_segments: List[Event] = []
         for start, end in zip(boundary_points, boundary_points[1:]):
             segment_period = Timeslot(start, end)
             best_sub: Optional[Event] = None
@@ -124,6 +125,16 @@ def merge_subwatcher_fields(
                             continue
                         enriched.data[key] = deepcopy(best_sub.data[key])
 
-            result.append(enriched)
+            if (
+                base_segments
+                and base_segments[-1].timestamp + base_segments[-1].duration
+                == enriched.timestamp
+                and base_segments[-1].data == enriched.data
+            ):
+                base_segments[-1].duration += enriched.duration
+            else:
+                base_segments.append(enriched)
+
+        result.extend(base_segments)
 
     return result

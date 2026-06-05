@@ -588,31 +588,37 @@ def test_merge_subwatcher_fields_sub_wins_conflict():
 
 
 def test_merge_subwatcher_fields_multiple_subsegments_preserve_duration():
-    """Multiple subwatcher slices should not over-attribute time to any key."""
+    """Repeated subwatcher values aggregate to their true covered duration."""
     now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
-    td5m = timedelta(minutes=5)
-    td10m = timedelta(minutes=10)
-    td20m = timedelta(minutes=20)
+    td15m = timedelta(minutes=15)
     td1h = timedelta(hours=1)
 
     base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
     sub = [
-        Event(timestamp=now + td5m, duration=td10m, data={"project": "p1"}),
+        Event(timestamp=now, duration=td15m, data={"project": "alpha"}),
+        Event(timestamp=now + td15m, duration=td15m, data={"project": "beta"}),
         Event(
-            timestamp=now + timedelta(minutes=35),
-            duration=td20m,
-            data={"project": "p2"},
+            timestamp=now + 2 * td15m,
+            duration=td15m,
+            data={"project": "alpha"},
         ),
     ]
 
     result = merge_subwatcher_fields(base, sub, ["project"])
 
-    project_durations = {
-        event.data["project"]: event.duration
-        for event in result
-        if "project" in event.data
+    by_project = {
+        event.data.get("project"): event.duration
+        for event in merge_events_by_keys(result, ["project"])
     }
-    assert project_durations == {"p1": td10m, "p2": td20m}
+    by_app = {
+        event.data.get("app"): event.duration
+        for event in merge_events_by_keys(result, ["app"])
+    }
+
+    assert by_project["alpha"] == 2 * td15m
+    assert by_project["beta"] == td15m
+    assert by_project[None] == td15m
+    assert by_app["vim"] == td1h
     assert sum_durations(result) == td1h
 
 
