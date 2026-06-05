@@ -323,6 +323,21 @@ def test_query2_function_invalid_argument_count():
         query(qname, example_query, starttime, endtime, ds)
 
 
+def test_query2_merge_subwatcher_fields_invalid_conflict():
+    ds = mock_ds
+    qname = "asd"
+    starttime = iso8601.parse_date("1970-01-01")
+    endtime = iso8601.parse_date("1970-01-02")
+    example_query = """
+        base = [];
+        sub = [];
+        RETURN = merge_subwatcher_fields(base, sub, ["project"], "invalid");
+    """
+
+    with pytest.raises(QueryFunctionException, match="conflict must be"):
+        query(qname, example_query, starttime, endtime, ds)
+
+
 @pytest.mark.parametrize("datastore", param_datastore_objects())
 def test_query2_function_in_function(datastore):
     qname = "asd"

@@ -233,7 +233,10 @@ def q2_merge_events_by_keys(events: list, keys: list) -> List[Event]:
 def q2_merge_subwatcher_fields(
     base_events: list, subwatcher_events: list, keys: list, conflict: str = "base_wins"
 ) -> List[Event]:
-    return merge_subwatcher_fields(base_events, subwatcher_events, keys, conflict)
+    try:
+        return merge_subwatcher_fields(base_events, subwatcher_events, keys, conflict)
+    except ValueError as exc:
+        raise QueryFunctionException(str(exc)) from None
 
 
 @q2_function(chunk_events_by_key)
