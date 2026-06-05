@@ -1,8 +1,9 @@
 import logging
 from copy import deepcopy
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from aw_core.models import Event
+from timeslot import Timeslot
 
 from .filter_period_intersect import _get_event_period
 
@@ -16,13 +17,14 @@ def merge_subwatcher_fields(
     conflict: str = "base_wins",
 ) -> List[Event]:
     """
-    For each event in *base_events*, find the longest-overlapping event in
-    *subwatcher_events* and copy the named *keys* from that subwatcher event
-    into the base event's ``data`` dict.
+    Split each event in *base_events* on overlapping subwatcher boundaries and
+    copy the named *keys* from the matching subwatcher event into each segment's
+    ``data`` dict.
 
-    Timestamps, durations, and event count of *base_events* are **unchanged**
-    — no phantom events are created. This makes duration/app/title aggregations
-    stay correct, unlike the ``concat`` workaround.
+    Unlike the ``concat`` workaround, this does not fabricate extra duration.
+    App/title/duration aggregations stay correct because the output still covers
+    exactly the same total time as *base_events*; only the segmentation changes
+    where subwatcher fields actually change.
 
     This is the backend primitive that lets every client (webui, native UIs,
     exporters) categorize by subwatcher fields (browser ``url``/``$domain``;
@@ -42,9 +44,9 @@ def merge_subwatcher_fields(
             ``"sub_wins"`` — subwatcher fields overwrite base fields.
 
     Returns:
-        A new list of base events with subwatcher fields injected.  Events in
-        *base_events* that have no overlapping subwatcher event are returned
-        with their original data unchanged.
+        A new list of base event segments with subwatcher fields injected.
+        Events in *base_events* that have no overlapping subwatcher event are
+        returned with their original data unchanged.
 
     Example::
 
@@ -56,10 +58,10 @@ def merge_subwatcher_fields(
         )
         # Now categorize(window_events, ...) can match on "project"/"file"
 
-    Note on N:1 overlap:
-        When multiple subwatcher events overlap a single base event, the one
-        with the **longest overlap duration** is used (attach-longest strategy).
-        This matches heartbeat granularity and avoids splitting base events.
+    Note on overlap:
+        Base events are split at the clipped subwatcher boundaries. When
+        multiple subwatcher events overlap the same output segment, the one
+        with the **longest overlap with that segment** is used.
     """
     if conflict not in ("base_wins", "sub_wins"):
         raise ValueError(
@@ -74,8 +76,8 @@ def merge_subwatcher_fields(
     result: List[Event] = []
     for base in base_events:
         base_period = _get_event_period(base)
-        best_sub: Optional[Event] = None
-        best_overlap_secs: float = 0.0
+        overlapping: List[Tuple[Event, Timeslot]] = []
+        boundaries = {base_period.start, base_period.end}
 
         for sub in sub_sorted:
             sub_period = _get_event_period(sub)
@@ -87,19 +89,41 @@ def merge_subwatcher_fields(
                 continue
             ip = base_period.intersection(sub_period)
             if ip:
+                overlapping.append((sub, sub_period))
+                boundaries.add(ip.start)
+                boundaries.add(ip.end)
+
+        if not overlapping:
+            result.append(deepcopy(base))
+            continue
+
+        boundary_points = sorted(boundaries)
+        for start, end in zip(boundary_points, boundary_points[1:]):
+            segment_period = Timeslot(start, end)
+            best_sub: Optional[Event] = None
+            best_overlap_secs: float = 0.0
+
+            for sub, sub_period in overlapping:
+                ip = segment_period.intersection(sub_period)
+                if not ip:
+                    continue
+
                 overlap_secs = ip.duration.total_seconds()
                 if overlap_secs > best_overlap_secs:
                     best_overlap_secs = overlap_secs
                     best_sub = sub
 
-        enriched = deepcopy(base)
-        if best_sub is not None:
-            for key in keys:
-                if key in best_sub.data:
-                    if conflict == "base_wins" and key in enriched.data:
-                        pass  # base keeps its value
-                    else:
-                        enriched.data[key] = best_sub.data[key]
-        result.append(enriched)
+            enriched = deepcopy(base)
+            enriched.timestamp = start
+            enriched.duration = end - start
+
+            if best_sub is not None:
+                for key in keys:
+                    if key in best_sub.data:
+                        if conflict == "base_wins" and key in enriched.data:
+                            continue
+                        enriched.data[key] = deepcopy(best_sub.data[key])
+
+            result.append(enriched)
 
     return result

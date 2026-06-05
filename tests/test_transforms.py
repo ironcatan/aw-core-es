@@ -474,7 +474,7 @@ def test_union_no_overlap():
 
 
 def test_merge_subwatcher_fields_basic():
-    """Subwatcher fields are injected into overlapping base events."""
+    """Fully overlapping subwatcher fields are injected without changing duration."""
     now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
     td1h = timedelta(hours=1)
 
@@ -501,9 +501,40 @@ def test_merge_subwatcher_fields_basic():
     # Subwatcher fields injected
     assert result[0].data["project"] == "myproject"
     assert result[0].data["language"] == "python"
-    # Timestamps and durations unchanged
+    # Exact overlap means no extra segmentation
     assert result[0].timestamp == now
     assert result[0].duration == td1h
+
+
+def test_merge_subwatcher_fields_partial_overlap_splits_base():
+    """Partial overlap only enriches the covered slice of the base event."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    td15m = timedelta(minutes=15)
+    td30m = timedelta(minutes=30)
+    td1h = timedelta(hours=1)
+
+    base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
+    sub = [
+        Event(
+            timestamp=now + td15m,
+            duration=td30m,
+            data={"project": "myproject"},
+        )
+    ]
+
+    result = merge_subwatcher_fields(base, sub, ["project"])
+
+    assert len(result) == 3
+    assert [event.duration for event in result] == [td15m, td30m, td15m]
+    assert [event.timestamp for event in result] == [
+        now,
+        now + td15m,
+        now + td15m + td30m,
+    ]
+    assert "project" not in result[0].data
+    assert result[1].data["project"] == "myproject"
+    assert "project" not in result[2].data
+    assert sum_durations(result) == td1h
 
 
 def test_merge_subwatcher_fields_no_overlap():
@@ -556,25 +587,33 @@ def test_merge_subwatcher_fields_sub_wins_conflict():
     assert result[0].data["file"] == "sub.py"
 
 
-def test_merge_subwatcher_fields_attach_longest():
-    """When multiple subwatcher events overlap a base event, the longest overlap wins."""
+def test_merge_subwatcher_fields_multiple_subsegments_preserve_duration():
+    """Multiple subwatcher slices should not over-attribute time to any key."""
     now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
-    td30m = timedelta(minutes=30)
+    td5m = timedelta(minutes=5)
+    td10m = timedelta(minutes=10)
+    td20m = timedelta(minutes=20)
     td1h = timedelta(hours=1)
 
-    # Base event: 12:00 – 13:00
     base = [Event(timestamp=now, duration=td1h, data={"app": "vim"})]
-    # Short overlap: 12:00 – 12:30 (30 min)
-    sub_short = Event(timestamp=now, duration=td30m, data={"project": "short"})
-    # Long overlap: 12:30 – 13:00 (30 min) — same overlap here, but added first
-    # Make one clearly longer: 11:45 – 13:00 (75 min overlap into base)
-    sub_long = Event(
-        timestamp=now - timedelta(minutes=15),
-        duration=td1h + timedelta(minutes=15),
-        data={"project": "long"},
-    )
-    result = merge_subwatcher_fields(base, [sub_short, sub_long], ["project"])
-    assert result[0].data["project"] == "long"
+    sub = [
+        Event(timestamp=now + td5m, duration=td10m, data={"project": "p1"}),
+        Event(
+            timestamp=now + timedelta(minutes=35),
+            duration=td20m,
+            data={"project": "p2"},
+        ),
+    ]
+
+    result = merge_subwatcher_fields(base, sub, ["project"])
+
+    project_durations = {
+        event.data["project"]: event.duration
+        for event in result
+        if "project" in event.data
+    }
+    assert project_durations == {"p1": td10m, "p2": td20m}
+    assert sum_durations(result) == td1h
 
 
 def test_merge_subwatcher_fields_empty_inputs():
