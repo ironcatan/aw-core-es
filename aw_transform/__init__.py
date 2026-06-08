@@ -11,6 +11,7 @@ from .sort_by import (
     limit_events,
 )
 from .split_url_events import split_url_events
+from .merge_subwatcher_fields import merge_subwatcher_fields
 from .simplify import simplify_string
 from .flood import flood
 from .classify import categorize, tag, Rule
@@ -33,6 +34,7 @@ __all__ = [
     "heartbeat_reduce",
     "heartbeat_merge",
     "merge_events_by_keys",
+    "merge_subwatcher_fields",
     "chunk_events_by_key",
     "limit_events",
     "filter_keyvals",

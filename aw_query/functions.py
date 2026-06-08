@@ -23,6 +23,7 @@ from aw_transform import (
     flood,
     limit_events,
     merge_events_by_keys,
+    merge_subwatcher_fields,
     period_union,
     simplify_string,
     sort_by_duration,
@@ -225,6 +226,17 @@ def q2_limit_events(events: list, count: int) -> List[Event]:
 @q2_typecheck
 def q2_merge_events_by_keys(events: list, keys: list) -> List[Event]:
     return merge_events_by_keys(events, keys)
+
+
+@q2_function(merge_subwatcher_fields)
+@q2_typecheck
+def q2_merge_subwatcher_fields(
+    base_events: list, subwatcher_events: list, keys: list, conflict: str = "base_wins"
+) -> List[Event]:
+    try:
+        return merge_subwatcher_fields(base_events, subwatcher_events, keys, conflict)
+    except ValueError as exc:
+        raise QueryFunctionException(str(exc)) from None
 
 
 @q2_function(chunk_events_by_key)
