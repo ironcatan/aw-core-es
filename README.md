@@ -6,9 +6,6 @@ by Manuel Arroyo Algar. Not affiliated with or endorsed by the ActivityWatch
 project.** Licensed under MPLv2, same as upstream. Adds `delete_events_before`
 and `get_storage_size` to the storage layer on top of the original.
 
-[![GitHub Actions badge](https://github.com/ActivityWatch/aw-core/workflows/Build/badge.svg)](https://github.com/ActivityWatch/aw-core/actions)
-[![Code coverage](https://codecov.io/gh/ActivityWatch/aw-core/branch/master/graph/badge.svg)](https://codecov.io/gh/ActivityWatch/aw-core)
-[![PyPI](https://img.shields.io/pypi/v/aw-core)](https://pypi.org/project/aw-core/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Typechecking: Mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
 
