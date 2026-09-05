@@ -95,6 +95,10 @@ class AbstractStorage(metaclass=ABCMeta):
     def delete_events_before(self, bucket_id: str, end: datetime) -> int:
         raise NotImplementedError
 
+    def get_storage_size(self) -> int:
+        """Returns the on-disk size in bytes of the underlying storage, if applicable."""
+        raise NotImplementedError
+
     @abstractmethod
     def replace(self, bucket_id: str, event_id: int, event: Event) -> bool:
         raise NotImplementedError

@@ -75,6 +75,9 @@ class Datastore:
     def buckets(self):
         return self.storage_strategy.buckets()
 
+    def get_storage_size(self) -> int:
+        return self.storage_strategy.get_storage_size()
+
 
 class Bucket:
     def __init__(self, datastore: Datastore, bucket_id: str) -> None:

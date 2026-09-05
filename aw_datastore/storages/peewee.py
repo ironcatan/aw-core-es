@@ -177,6 +177,7 @@ class PeeweeStorage(AbstractStorage):
                 + ".db"
             )
             filepath = os.path.join(data_dir, filename)
+        self.filepath = filepath
         self.db = _db
         self.db.init(
             filepath,
@@ -351,6 +352,16 @@ class PeeweeStorage(AbstractStorage):
             .where(EventModel.timestamp < end)
             .execute()
         )
+
+    def get_storage_size(self) -> int:
+        # WAL mode keeps not-yet-checkpointed writes in sidecar -wal/-shm files,
+        # which count toward real disk usage even though the main file is smaller.
+        total = 0
+        for suffix in ("", "-wal", "-shm"):
+            path = self.filepath + suffix
+            if os.path.exists(path):
+                total += os.path.getsize(path)
+        return total
 
     def replace(self, bucket_id, event_id, event):
         e = self._get_event(bucket_id, event_id)
