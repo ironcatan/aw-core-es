@@ -124,6 +124,10 @@ class Bucket:
             self.bucket_id, starttime, endtime
         )
 
+    def delete_events_before(self, end: datetime) -> int:
+        """Deletes all events in the bucket with a timestamp before `end`. Returns the number of deleted events."""
+        return self.ds.storage_strategy.delete_events_before(self.bucket_id, end)
+
     def insert(self, events: Union[Event, List[Event]]) -> Optional[Event]:
         """
         Inserts one or several events.

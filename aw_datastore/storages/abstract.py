@@ -92,6 +92,9 @@ class AbstractStorage(metaclass=ABCMeta):
     def delete(self, bucket_id: str, event_id: int) -> bool:
         raise NotImplementedError
 
+    def delete_events_before(self, bucket_id: str, end: datetime) -> int:
+        raise NotImplementedError
+
     @abstractmethod
     def replace(self, bucket_id: str, event_id: int, event: Event) -> bool:
         raise NotImplementedError
