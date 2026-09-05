@@ -1,5 +1,10 @@
-aw-core
+aw-core (Chronly fork)
 =======
+
+**This is Chronly, a private fork of ActivityWatch's `aw-core`, maintained
+by Manuel Arroyo Algar. Not affiliated with or endorsed by the ActivityWatch
+project.** Licensed under MPLv2, same as upstream. Adds `delete_events_before`
+and `get_storage_size` to the storage layer on top of the original.
 
 [![GitHub Actions badge](https://github.com/ActivityWatch/aw-core/workflows/Build/badge.svg)](https://github.com/ActivityWatch/aw-core/actions)
 [![Code coverage](https://codecov.io/gh/ActivityWatch/aw-core/branch/master/graph/badge.svg)](https://codecov.io/gh/ActivityWatch/aw-core)
